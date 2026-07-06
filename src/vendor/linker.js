@@ -1,0 +1,77 @@
+import path from "node:path";
+import { extractKeywords, keywordSimilarityLinks } from "./keywords.js";
+
+// 폴더당 2~20개 규모일 때만 형제 원형 링크를 만든다(허브가 너무 크면 링크 폭발 + 무의미).
+function folderSiblingLinks(nodes) {
+  const byFolder = new Map();
+  nodes.forEach((n) => {
+    if (!byFolder.has(n.folder)) byFolder.set(n.folder, []);
+    byFolder.get(n.folder).push(n.id);
+  });
+
+  const links = [];
+  for (const ids of byFolder.values()) {
+    if (ids.length < 2 || ids.length > 20) continue;
+    const ordered = [...ids].sort();
+    ordered.forEach((id, i) => {
+      const next = ordered[(i + 1) % ordered.length];
+      links.push({ source: id, target: next, kind: "folder" });
+    });
+  }
+  return links;
+}
+
+export function buildGraph(root, extracted) {
+  const titleToId = new Map();
+  const nodes = extracted.map(({ filePath, result }) => {
+    const rel = path.relative(root, filePath).split(path.sep).join("/");
+    const parts = rel.split("/");
+    const topFolder = parts.length > 1 ? parts[0] : "(루트)";
+    const title = result.title || path.basename(filePath, path.extname(filePath));
+    const node = {
+      id: rel,
+      title,
+      type: result.type || topFolder,
+      file: rel,
+      absolutePath: path.resolve(filePath),
+      folder: path.dirname(filePath),
+      body: result.body,
+    };
+    titleToId.set(title, node.id);
+    return node;
+  });
+
+  // 1) 명시적 [[위키링크]] (마크다운에 있는 경우만)
+  const wikilinks = [];
+  const seenPairs = new Set();
+  extracted.forEach(({ result }, i) => {
+    for (const targetTitle of result.wikilinks || []) {
+      const targetId = titleToId.get(targetTitle);
+      if (!targetId || targetId === nodes[i].id) continue;
+      const pair = JSON.stringify([nodes[i].id, targetId]);
+      if (seenPairs.has(pair)) continue;
+      seenPairs.add(pair);
+      wikilinks.push({ source: nodes[i].id, target: targetId, kind: "wikilink" });
+    }
+  });
+
+  // 2) 폴더 형제 링크
+  const folderLinks = folderSiblingLinks(nodes);
+
+  // 3) 키워드 유사도 링크 (명시적 링크가 거의 없는 일반 문서 묶음을 위한 자동 관계)
+  const bodies = nodes.map((n) => n.body);
+  const keywordSets = extractKeywords(bodies, 8);
+  const similarLinks = keywordSimilarityLinks(
+    nodes.map((n) => n.id),
+    keywordSets,
+    2
+  );
+
+  const allLinks = [...wikilinks, ...folderLinks, ...similarLinks];
+  const typeCounts = {};
+  nodes.forEach((n) => {
+    typeCounts[n.type] = (typeCounts[n.type] || 0) + 1;
+  });
+
+  return { nodes, links: allLinks, typeCounts };
+}

@@ -1,0 +1,25 @@
+{
+  "name": "knowledge-os-llm-wiki",
+  "version": "0.1.0",
+  "description": "Company Knowledge OS: LLM Wiki + Knowledge Graph dashboard built on wikigraph3d ideas.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "knowledge-os": "src/cli.js"
+  },
+  "scripts": {
+    "init": "node src/cli.js init",
+    "ingest": "node src/cli.js ingest",
+    "serve": "node src/cli.js serve",
+    "demo": "node src/cli.js demo"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1"
+  }
+}
