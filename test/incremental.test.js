@@ -35,12 +35,24 @@ test('증분: 소스 삭제 시 orphan 산출물이 제거된다', async () => {
   try {
     const s1 = await ingestWorkspace({ source: src, workspace: ws, title: 'T' });
     assert.equal(s1.metrics.documents, 2);
+    const oneSlug = s1.documents.find((d) => d.source_path === 'a/one.md').slug;
+    const twoSlug = s1.documents.find((d) => d.source_path === 'a/two.md').slug;
     // two.md 삭제 후 재-ingest
     fs.rmSync(path.join(src, 'a', 'two.md'));
     const s2 = await ingestWorkspace({ source: src, workspace: ws, title: 'T' });
     assert.equal(s2.metrics.documents, 1);
+    // 개수뿐 아니라 신원 검증: 살아남은 건 one.md, 사라진 건 정확히 two.md의 산출물이어야 함
     const remaining = fs.readdirSync(path.join(ws, 'docs', 'documents'));
-    assert.equal(remaining.length, 1, `orphan 남음: ${remaining.join(',')}`);
+    assert.deepEqual(remaining, [`${oneSlug}.md`], `orphan 남음: ${remaining.join(',')}`);
+    for (const p of [
+      path.join(ws, 'docs', 'documents', `${twoSlug}.md`),
+      path.join(ws, 'raw', 'imports', `${twoSlug}.md`),
+      path.join(ws, 'contracts', `${twoSlug}.json`),
+    ]) {
+      assert.equal(fs.existsSync(p), false, `orphan 산출물이 남음: ${p}`);
+    }
+    // 살아남은 문서의 산출물은 존재해야 함
+    assert.equal(fs.existsSync(path.join(ws, 'contracts', `${oneSlug}.json`)), true);
   } finally {
     fs.rmSync(src, { recursive: true, force: true });
     fs.rmSync(ws, { recursive: true, force: true });
