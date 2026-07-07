@@ -6,7 +6,8 @@ import { renderHtml } from '../vendor/render.js';
 import { summarizeNodeWithOllama, checkOllama, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from '../vendor/ollama.js';
 import { mapWithConcurrency } from './concurrency.js';
 import { contentHash } from './hash.js';
-import { ensureDir, createSlugger, excerpt, nowIso, writeJson } from './utils.js';
+import { createCache } from './cache.js';
+import { ensureDir, createSlugger, excerpt, nowIso, writeJson, readJson } from './utils.js';
 import { renderDocPage, renderRawPage, renderConceptPage } from './pages.js';
 import { buildLinkResolver } from './link-resolver.js';
 
@@ -105,10 +106,17 @@ export async function initWorkspace(workspaceRoot, title = 'Company Knowledge OS
   return { workspaceRoot, title };
 }
 
-export async function ingestWorkspace({ source, workspace, title = 'Company Knowledge OS', ollama = false, ollamaModel = DEFAULT_OLLAMA_MODEL, ollamaUrl = DEFAULT_OLLAMA_BASE_URL, maxConcepts = null }) {
+export async function ingestWorkspace({ source, workspace, title = 'Company Knowledge OS', ollama = false, ollamaModel = DEFAULT_OLLAMA_MODEL, ollamaUrl = DEFAULT_OLLAMA_BASE_URL, maxConcepts = null, ollamaConcurrency = 4, graphBodyLimit = 2000 }) {
   ensureDir(workspace);
   await initWorkspace(workspace, title);
-  const extracted = await extractFolder(source);
+
+  const llmDir = path.join(workspace, '.llmwiki');
+  const extractCache = createCache(path.join(llmDir, 'extract-cache.json'));
+  const aiCache = createCache(path.join(llmDir, 'ai-cache.json'));
+  const prevManifest = readJson(path.join(llmDir, 'manifest.json'), {}) || {};
+  const nextManifest = {};
+
+  const extracted = await extractFolder(source, { cache: extractCache });
   const toDocSlug = createSlugger();
   const docs = extracted.map(({ filePath, result }) => {
     const rel = path.relative(source, filePath).split(path.sep).join('/');
@@ -134,7 +142,7 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
     doc.summary = excerpt(doc.body, 240);
   });
 
-  await maybeEnrichWithOllama(docs, { ollama, ollamaModel, ollamaUrl });
+  await maybeEnrichWithOllama(docs, { ollama, ollamaModel, ollamaUrl, aiCache, ollamaConcurrency });
   docs.forEach((doc) => {
     if (doc.ai?.summary) doc.summary = doc.ai.summary;
     if (doc.ai?.tags?.length) doc.keywords = unique([...doc.ai.tags, ...doc.keywords]).slice(0, 8);
@@ -197,6 +205,13 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
   }
 
   for (const doc of docs) {
+    const h = contentHash(doc.body);
+    const prev = prevManifest[doc.slug];
+    doc.updatedAt = (prev && prev.hash === h) ? prev.updatedAt : nowIso();
+    nextManifest[doc.slug] = { hash: h, updatedAt: doc.updatedAt, source_path: doc.file };
+  }
+
+  for (const doc of docs) {
     const relatedDocs = similarLinks.filter((link) => link.source === doc.id || link.target === doc.id)
       .map((link) => (link.source === doc.id ? link.target : link.source))
       .map((id) => docs.find((item) => item.id === id))
@@ -208,11 +223,15 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
     writeJson(path.join(workspace, 'contracts', `${doc.slug}.json`), contract);
   }
 
+  // stale 개념 페이지 제거 (개념은 전량 재생성되므로 디렉토리를 비우고 다시 쓴다)
+  const conceptsDir = path.join(workspace, 'docs', 'concepts');
+  try { for (const f of fs.readdirSync(conceptsDir)) if (f.endsWith('.md')) fs.rmSync(path.join(conceptsDir, f), { force: true }); } catch {}
+
   for (const concept of concepts) {
     fs.writeFileSync(path.join(workspace, 'docs', 'concepts', `${concept.slug}.md`), renderConceptPage(concept), 'utf-8');
   }
 
-  const docNodes = docs.map((doc) => ({ id: doc.id, title: doc.title, type: doc.department, file: doc.file, absolutePath: doc.absolutePath, folder: doc.folder, body: doc.body, ai: { summary: doc.summary, tags: doc.keywords } }));
+  const docNodes = docs.map((doc) => ({ id: doc.id, title: doc.title, type: doc.department, file: doc.file, absolutePath: doc.absolutePath, folder: doc.folder, body: doc.body.slice(0, graphBodyLimit), ai: { summary: doc.summary, tags: doc.keywords } }));
   const conceptNodes = concepts.map((concept) => ({ id: concept.id, title: concept.title, type: 'Concept', file: concept.file, absolutePath: concept.absolutePath, folder: concept.folder, body: concept.body, ai: { summary: concept.summary, tags: concept.keywords } }));
   const nodes = [...docNodes, ...conceptNodes];
   const links = [...wikilinks, ...folderLinks, ...similarLinks, ...conceptLinks, ...conceptCooccur];
@@ -233,6 +252,21 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
     documents: docs.map((doc) => ({ slug: doc.slug, title: doc.title, department: doc.department, source_path: doc.file, summary: doc.summary, keywords: doc.keywords, related_concepts: doc.relatedConcepts, page_path: `docs/documents/${doc.slug}.md`, raw_path: `raw/imports/${doc.slug}.md`, contract_path: `contracts/${doc.slug}.json`, body_preview: excerpt(doc.body, 420) })),
     concepts: concepts.map((concept) => ({ slug: concept.slug, title: concept.title, summary: concept.summary, keywords: concept.keywords, related_documents: concept.relatedDocs.map((doc) => doc.slug), page_path: `docs/concepts/${concept.slug}.md` }))
   };
+  // 이전 매니페스트에 있으나 이번엔 없는 slug의 산출물 제거
+  const currentSlugs = new Set(docs.map((d) => d.slug));
+  for (const slug of Object.keys(prevManifest)) {
+    if (currentSlugs.has(slug)) continue;
+    for (const p of [
+      path.join(workspace, 'docs', 'documents', `${slug}.md`),
+      path.join(workspace, 'raw', 'imports', `${slug}.md`),
+      path.join(workspace, 'contracts', `${slug}.json`),
+    ]) { try { fs.rmSync(p, { force: true }); } catch {} }
+  }
+  // 매니페스트/캐시 flush
+  writeJson(path.join(llmDir, 'manifest.json'), nextManifest);
+  extractCache.save();
+  aiCache.save();
+
   writeJson(path.join(workspace, 'state.json'), state);
   return state;
 }
