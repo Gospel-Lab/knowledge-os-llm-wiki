@@ -57,6 +57,9 @@ npm run ingest -- \
   --title "Company Knowledge OS"
 ```
 
+**옵션:**
+- `--max-concepts N` — 추출할 최대 개념 수 (기본값: `max(14, min(80, round(sqrt(docCount)*3)))`)
+
 Ollama가 있으면 문서 요약을 더 풍부하게 붙일 수 있습니다.
 
 ```bash
@@ -97,6 +100,14 @@ npm run serve -- --workspace ./workspace/company-os --port 3487
   -> Graph HTML 생성
   -> 브라우저 대시보드 + Ollama 질문응답
 ```
+
+## 한국어 지원
+
+이 프로젝트는 한국어 문서 처리에 최적화되어 있습니다:
+
+- **휴리스틱 기반 키워드 추출**: 한국어 조사(은/은, 가/이, 를/을 등)를 자동 제거하고, 2글자 이상 어근만 보존합니다. 형태소 분석기를 사용하지 않으며, 정확도는 규칙 기반 휴리스틱입니다.
+- **안전한 파일명 변환**: NFC 정규화를 거친 충돌 없는 슬러그(slug) 생성; Obsidian 호환 wikilink 해석(경로 > 파일명 > 제목 우선순위)
+- **테스트**: `npm test`로 21개 단위 테스트 실행 (한국어 end-to-end 포함)
 
 ## 한계
 
