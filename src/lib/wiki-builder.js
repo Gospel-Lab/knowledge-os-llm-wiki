@@ -5,6 +5,7 @@ import { extractKeywords, keywordSimilarityLinks } from '../vendor/keywords.js';
 import { renderHtml } from '../vendor/render.js';
 import { summarizeNodeWithOllama, checkOllama, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from '../vendor/ollama.js';
 import { ensureDir, slugify, createSlugger, excerpt, nowIso, writeJson } from './utils.js';
+import { renderDocPage, renderRawPage, renderConceptPage } from './pages.js';
 
 function topFolderFromRel(relPath) {
   const parts = relPath.split('/');
@@ -49,20 +50,6 @@ function buildSearchContract(doc, relatedDocs, relatedConcepts) {
     related_concepts: relatedConcepts,
     search_questions: inferQuestions(doc.title, doc.keywords, doc.department),
   };
-}
-
-function frontmatter(data) {
-  const lines = ['---'];
-  for (const [key, value] of Object.entries(data)) {
-    if (Array.isArray(value)) {
-      lines.push(`${key}:`);
-      for (const item of value) lines.push(`  - ${String(item).replace(/\n/g, ' ')}`);
-    } else {
-      lines.push(`${key}: ${String(value).replace(/\n/g, ' ')}`);
-    }
-  }
-  lines.push('---', '');
-  return lines.join('\n');
 }
 
 function unique(items) {
@@ -199,43 +186,13 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
       .filter(Boolean)
       .slice(0, 4);
     const contract = buildSearchContract(doc, relatedDocs, doc.relatedConcepts);
-    const docPage = [
-      frontmatter({ title: doc.title, source_path: doc.file, department: doc.department, keywords: doc.keywords, related_concepts: doc.relatedConcepts, updated_at: nowIso() }),
-      `# ${doc.title}`,
-      '',
-      '## Summary',
-      doc.summary,
-      '',
-      '## Search Contract',
-      '```json',
-      JSON.stringify(contract, null, 2),
-      '```',
-      '',
-      '## Related Concepts',
-      ...(doc.relatedConcepts.length ? doc.relatedConcepts.map((slug) => `- [[${slug}]]`) : ['- 없음']),
-      '',
-      '## Source Excerpt',
-      doc.body.slice(0, 4000),
-      ''
-    ].join('\n');
-    const rawPage = [frontmatter({ title: doc.title, source_path: doc.file, imported_at: nowIso() }), doc.body, ''].join('\n');
-    fs.writeFileSync(path.join(workspace, 'docs', 'documents', `${doc.slug}.md`), docPage, 'utf-8');
-    fs.writeFileSync(path.join(workspace, 'raw', 'imports', `${doc.slug}.md`), rawPage, 'utf-8');
+    fs.writeFileSync(path.join(workspace, 'docs', 'documents', `${doc.slug}.md`), renderDocPage(doc, contract), 'utf-8');
+    fs.writeFileSync(path.join(workspace, 'raw', 'imports', `${doc.slug}.md`), renderRawPage(doc), 'utf-8');
     writeJson(path.join(workspace, 'contracts', `${doc.slug}.json`), contract);
   }
 
   for (const concept of concepts) {
-    const conceptPage = [
-      frontmatter({ title: concept.title, kind: 'concept', related_documents: concept.relatedDocs.map((doc) => doc.slug), keywords: concept.keywords, updated_at: nowIso() }),
-      `# ${concept.title}`,
-      '',
-      concept.summary,
-      '',
-      '## Related Documents',
-      ...concept.relatedDocs.map((doc) => `- [[${doc.slug}]] — ${doc.summary}`),
-      ''
-    ].join('\n');
-    fs.writeFileSync(path.join(workspace, 'docs', 'concepts', `${concept.slug}.md`), conceptPage, 'utf-8');
+    fs.writeFileSync(path.join(workspace, 'docs', 'concepts', `${concept.slug}.md`), renderConceptPage(concept), 'utf-8');
   }
 
   const docNodes = docs.map((doc) => ({ id: doc.id, title: doc.title, type: doc.department, file: doc.file, absolutePath: doc.absolutePath, folder: doc.folder, body: doc.body, ai: { summary: doc.summary, tags: doc.keywords } }));
