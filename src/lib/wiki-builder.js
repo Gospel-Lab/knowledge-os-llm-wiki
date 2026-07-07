@@ -4,6 +4,8 @@ import { extractFolder } from './extractor.js';
 import { extractKeywords, keywordSimilarityLinks } from '../vendor/keywords.js';
 import { renderHtml } from '../vendor/render.js';
 import { summarizeNodeWithOllama, checkOllama, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from '../vendor/ollama.js';
+import { mapWithConcurrency } from './concurrency.js';
+import { contentHash } from './hash.js';
 import { ensureDir, createSlugger, excerpt, nowIso, writeJson } from './utils.js';
 import { renderDocPage, renderRawPage, renderConceptPage } from './pages.js';
 import { buildLinkResolver } from './link-resolver.js';
@@ -65,13 +67,22 @@ async function maybeEnrichWithOllama(nodes, options) {
   if (!options.ollama) return { ok: false, enabled: false };
   const status = await checkOllama({ baseUrl: options.ollamaUrl, model: options.ollamaModel });
   if (!status.ok || !status.modelAvailable) return { ok: false, enabled: true, status };
+  const cache = options.aiCache;
+  const model = options.ollamaModel;
+  const toRun = [];
   for (const node of nodes) {
-    try {
-      node.ai = await summarizeNodeWithOllama(node, { baseUrl: options.ollamaUrl, model: options.ollamaModel });
-    } catch (error) {
-      node.ai = { error: error.message, model: options.ollamaModel };
-    }
+    const key = `ai:${model}:${contentHash(node.body)}`;
+    const hit = cache?.get(key);
+    if (hit) { node.ai = hit; } else { toRun.push({ node, key }); }
   }
+  await mapWithConcurrency(toRun, options.ollamaConcurrency || 4, async ({ node, key }) => {
+    try {
+      node.ai = await summarizeNodeWithOllama(node, { baseUrl: options.ollamaUrl, model });
+      cache?.set(key, node.ai);
+    } catch (error) {
+      node.ai = { error: error.message, model };
+    }
+  });
   return { ok: true, enabled: true, status };
 }
 
