@@ -26,27 +26,14 @@ const HTML_HEAD_A = `<!doctype html>
 <title>`;
 
 const HTML_HEAD_B = `— 3D Document Graph</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"
-        integrity="sha384-qOkzR5Ke/XkQxuGVJ9hpFEpDlcoLtWwVYhnJf06cLIZa2vaIptSqaubivErzmD5O"
-        crossorigin="anonymous"></script>
-<script src="https://unpkg.com/3d-force-graph@1.73.4/dist/3d-force-graph.min.js"
-        integrity="sha384-GNPicn8pBA2/PGSyPTpxIlPurgLUYcNYJ2zskIq782dE9+gp5E32WSyuxZqA7J+u"
-        crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"
-        integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi"
-        crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"
-        integrity="sha384-PCSoOZTpbkikBEtd/+uV3WNdc676i9KUf01KOA8CnJotvlx8rRrETbDuwdjqTYvt"
-        crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"
-        integrity="sha384-+VfUPEb0PdtChMwmBcBmykRMDd+v6D/oFmB3rZM/puCMDYcIvF968OimRh4KQY9a"
-        crossorigin="anonymous"></script>
+<script src="./vendor/three.min.js"></script>
+<script src="./vendor/3d-force-graph.min.js"></script>
+<script src="./vendor/marked.min.js"></script>
+<script src="./vendor/fuse.min.js"></script>
+<script src="./vendor/purify.min.js"></script>
 <style>
   :root { color-scheme: dark; }
-  html, body { margin: 0; padding: 0; height: 100%; background: #0b0e14; color: #dfe6ee; font-family: "Inter", "Noto Sans KR", "Segoe UI", sans-serif; overflow: hidden; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #0b0e14; color: #dfe6ee; font-family: "Noto Sans KR", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
   #graph { position: fixed; inset: 0; }
   #cdsaBanner {
     position: fixed; top: 0; left: 0; right: 0; height: 42px; z-index: 50;
