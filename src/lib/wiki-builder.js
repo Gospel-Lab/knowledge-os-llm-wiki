@@ -6,6 +6,7 @@ import { renderHtml } from '../vendor/render.js';
 import { summarizeNodeWithOllama, checkOllama, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from '../vendor/ollama.js';
 import { ensureDir, slugify, createSlugger, excerpt, nowIso, writeJson } from './utils.js';
 import { renderDocPage, renderRawPage, renderConceptPage } from './pages.js';
+import { buildLinkResolver } from './link-resolver.js';
 
 function topFolderFromRel(relPath) {
   const parts = relPath.split('/');
@@ -152,12 +153,12 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
     };
   });
 
-  const titleToId = new Map(docs.map((doc) => [doc.title, doc.id]));
+  const resolveLink = buildLinkResolver(docs);
   const wikilinks = [];
   const seen = new Set();
   for (const doc of docs) {
     for (const targetTitle of doc.wikilinks) {
-      const target = titleToId.get(targetTitle);
+      const target = resolveLink(targetTitle);
       if (!target || target === doc.id) continue;
       const key = `${doc.id}=>${target}`;
       if (seen.has(key)) continue;
