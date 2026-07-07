@@ -30,12 +30,25 @@ export function ensureDir(dirPath) {
 }
 
 export function slugify(value) {
-  return String(value || '')
+  return (String(value || '')
     .normalize('NFKD')
     .replace(/[^\p{L}\p{N}]+/gu, '-')
     .replace(/^-+|-+$/g, '')
     .replace(/-{2,}/g, '-')
-    .toLowerCase() || 'untitled';
+    .toLowerCase()
+    .normalize('NFC')) || 'untitled';
+}
+
+// 같은 ingest 안에서 slug 유일성을 보장한다.
+// scanFolder가 파일을 정렬해 주므로 suffix 부여 순서도 결정론적이다.
+export function createSlugger() {
+  const used = new Map();
+  return (value) => {
+    const base = slugify(value);
+    const count = (used.get(base) || 0) + 1;
+    used.set(base, count);
+    return count === 1 ? base : `${base}-${count}`;
+  };
 }
 
 export function cleanText(text = '') {

@@ -4,7 +4,7 @@ import { extractFolder } from './extractor.js';
 import { extractKeywords, keywordSimilarityLinks } from '../vendor/keywords.js';
 import { renderHtml } from '../vendor/render.js';
 import { summarizeNodeWithOllama, checkOllama, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from '../vendor/ollama.js';
-import { ensureDir, slugify, excerpt, nowIso, writeJson } from './utils.js';
+import { ensureDir, slugify, createSlugger, excerpt, nowIso, writeJson } from './utils.js';
 
 function topFolderFromRel(relPath) {
   const parts = relPath.split('/');
@@ -106,12 +106,14 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
   ensureDir(workspace);
   await initWorkspace(workspace, title);
   const extracted = await extractFolder(source);
+  const toDocSlug = createSlugger();
   const docs = extracted.map(({ filePath, result }) => {
     const rel = path.relative(source, filePath).split(path.sep).join('/');
     const name = path.basename(filePath, path.extname(filePath));
+    const slug = toDocSlug(rel);
     return {
-      id: `doc:${slugify(rel)}`,
-      slug: slugify(rel),
+      id: `doc:${slug}`,
+      slug,
       title: result.title || name,
       file: rel,
       absolutePath: path.resolve(filePath),
@@ -139,8 +141,9 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
   for (const doc of docs) unique(doc.keywords).forEach((keyword) => keywordFreq.set(keyword, (keywordFreq.get(keyword) || 0) + 1));
   const conceptNames = [...keywordFreq.entries()].filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([keyword]) => keyword);
 
+  const toConceptSlug = createSlugger();
   const concepts = conceptNames.map((name) => {
-    const slug = slugify(name);
+    const slug = toConceptSlug(name);
     const relatedDocs = docs.filter((doc) => doc.keywords.includes(name));
     return {
       id: `concept:${slug}`,
