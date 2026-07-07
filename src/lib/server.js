@@ -7,6 +7,7 @@ import { checkOllama, normalizeOllamaBaseUrl, DEFAULT_OLLAMA_BASE_URL, DEFAULT_O
 
 function contentType(filePath) {
   if (filePath.endsWith('.html')) return 'text/html; charset=utf-8';
+  if (filePath.endsWith('.js')) return 'text/javascript; charset=utf-8';
   if (filePath.endsWith('.json')) return 'application/json; charset=utf-8';
   if (filePath.endsWith('.md')) return 'text/markdown; charset=utf-8';
   return 'text/plain; charset=utf-8';

@@ -31,7 +31,7 @@ export function renderDocPage(doc, contract) {
     department: doc.department,
     keywords: doc.keywords,
     related_concepts: doc.relatedConcepts || [],
-    updated_at: nowIso(),
+    updated_at: doc.updatedAt || nowIso(),
   });
 }
 
@@ -58,6 +58,6 @@ export function renderConceptPage(concept) {
     kind: 'concept',
     related_documents: concept.relatedDocs.map((doc) => doc.slug),
     keywords: concept.keywords,
-    updated_at: nowIso(),
+    updated_at: concept.updatedAt || nowIso(),
   });
 }
