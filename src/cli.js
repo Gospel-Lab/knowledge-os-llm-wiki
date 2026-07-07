@@ -35,7 +35,7 @@ async function main() {
       ollama: Boolean(args.ollama),
       ollamaModel: value('ollama-model', 'llama3.2'),
       ollamaUrl: value('ollama-url', 'http://127.0.0.1:11434'),
-      maxConcepts: args['max-concepts'] ? Number(args['max-concepts']) : null,
+      maxConcepts: typeof args['max-concepts'] === 'string' ? Number(args['max-concepts']) : null,
     });
     console.log(JSON.stringify({ ok: true, command, metrics: result.metrics, workspace: result.workspace }, null, 2));
     return;
