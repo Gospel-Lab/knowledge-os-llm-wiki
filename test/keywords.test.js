@@ -19,6 +19,24 @@ test('tokenize: 서술어 토큰은 버려진다', () => {
   assert.ok(!tokens.includes('것입니다'));
 });
 
+test('tokenize: 모음 어간 ㅂ니다-활용 서술어도 버려진다', () => {
+  const tokens = tokenize('은혜를 드립니다. 물이 넘칩니다. 학교에 갑니다. 정말 그렇습니까? 어디로 갑니까?');
+  assert.ok(!tokens.includes('드립니다'));
+  assert.ok(!tokens.includes('넘칩니다'));
+  assert.ok(!tokens.includes('갑니다'));
+  assert.ok(!tokens.includes('그렇습니까'));
+  assert.ok(!tokens.includes('갑니까'));
+});
+
+test('tokenize: "이는"은 불용어로 제거된다', () => {
+  const tokens = tokenize('이는 매우 중요한 사실이다');
+  assert.ok(!tokens.includes('이는'));
+});
+
+test('tokenize: NFD로 입력해도 NFC 결과와 동일하다', () => {
+  assert.deepEqual(tokenize('하나님의 은혜'.normalize('NFD')), tokenize('하나님의 은혜'));
+});
+
 test('tokenize: 짧은 명사는 과잉 스트리핑하지 않는다', () => {
   // '교회'에서 '회'를 조사로 오인해 '교'만 남기면 안 된다 (잔여 2자 미만 보호)
   const tokens = tokenize('교회 종이 울린다');

@@ -28,7 +28,7 @@ test('한국어 vault end-to-end ingest', async (t) => {
     await t.test('개념에 조사 없는 명사가 뽑히고 서술어는 없다', () => {
       const names = state.concepts.map((c) => c.title);
       assert.ok(names.includes('하나님'), `개념 목록: ${names.join(', ')}`);
-      assert.ok(!names.some((n) => /습니다$|입니다$|것입니다$/.test(n)));
+      assert.ok(!names.some((n) => /니다$/.test(n)));
       assert.ok(!names.includes('하나님은'));
       assert.ok(!names.includes('하나님의'));
     });

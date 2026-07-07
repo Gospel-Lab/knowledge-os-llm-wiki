@@ -4,7 +4,7 @@ import { extractFolder } from './extractor.js';
 import { extractKeywords, keywordSimilarityLinks } from '../vendor/keywords.js';
 import { renderHtml } from '../vendor/render.js';
 import { summarizeNodeWithOllama, checkOllama, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from '../vendor/ollama.js';
-import { ensureDir, slugify, createSlugger, excerpt, nowIso, writeJson } from './utils.js';
+import { ensureDir, createSlugger, excerpt, nowIso, writeJson } from './utils.js';
 import { renderDocPage, renderRawPage, renderConceptPage } from './pages.js';
 import { buildLinkResolver } from './link-resolver.js';
 
