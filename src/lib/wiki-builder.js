@@ -10,6 +10,7 @@ import { createCache } from './cache.js';
 import { ensureDir, createSlugger, excerpt, nowIso, writeJson, readJson } from './utils.js';
 import { renderDocPage, renderRawPage, renderConceptPage } from './pages.js';
 import { buildLinkResolver } from './link-resolver.js';
+import { copyVendorAssets } from './assets.js';
 
 function topFolderFromRel(relPath) {
   const parts = relPath.split('/');
@@ -240,6 +241,7 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
 
   const html = renderHtml({ title, nodes, links, typeCounts, ai: { enabled: ollama, runtimeAsk: true, model: ollamaModel, baseUrl: ollamaUrl } });
   fs.writeFileSync(path.join(workspace, 'graph', 'company-knowledge-graph.html'), html, 'utf-8');
+  copyVendorAssets(path.join(workspace, 'graph', 'vendor'));
 
   const state = {
     title,
