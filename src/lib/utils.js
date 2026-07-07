@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { tokenize } from '../vendor/keywords.js';
 
 export function parseArgs(argv) {
   const args = { _: [] };
@@ -78,9 +79,7 @@ export function readJson(filePath, fallback = null) {
 }
 
 export function tokenizeQuery(value) {
-  return cleanText(value)
-    .toLowerCase()
-    .match(/[\p{L}\p{N}]{2,}/gu) || [];
+  return tokenize(cleanText(value));
 }
 
 export function scoreByTokenOverlap(question, candidates, fields) {
