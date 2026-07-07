@@ -34,19 +34,26 @@ test('createCache: 손상된 JSON은 빈 캐시로 시작', () => {
   }
 });
 
-test('extractFolder: 캐시 히트 시 재파싱하지 않는다', async () => {
+test('extractFolder: 캐시 히트 시 재파싱하지 않는다 (센티넬로 증명)', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'extract-'));
   try {
     fs.writeFileSync(path.join(dir, 'a.md'), '# 제목\n본문 내용');
     const cache = createCache(path.join(dir, '.cache.json'));
     const first = await extractFolder(dir, { cache });
     assert.equal(first.length, 1);
-    assert.equal(first[0].result.body.includes('본문 내용'), true);
-    // 캐시에 기록되어야 함
+    assert.ok(first[0].result.body.includes('본문 내용'));
     cache.save();
+
+    const key = `extract:${path.join(dir, 'a.md')}`;
+    const cached = cache.get(key);
+    assert.ok(cached, 'expected extraction to be cached');
+    // 캐시된 값을 센티넬로 조작 — 히트 시 이 값이 그대로 반환되어야 함(재파싱이면 원문이 나옴)
+    cache.set(key, { sig: cached.sig, result: { ...cached.result, body: '__SENTINEL__' } });
+    cache.save();
+
     const cache2 = createCache(path.join(dir, '.cache.json'));
     const second = await extractFolder(dir, { cache: cache2 });
-    assert.deepEqual(second[0].result, first[0].result);
+    assert.equal(second[0].result.body, '__SENTINEL__');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
