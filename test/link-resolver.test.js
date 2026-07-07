@@ -32,3 +32,12 @@ test('resolver: 제목 일치 fallback + 헤딩 무시 + 미해석은 null', () 
   assert.equal(resolve('계약 프로세스#결제'), 'doc:b');
   assert.equal(resolve('존재하지않는문서'), null);
 });
+
+test('resolver: NFD 파일명 ↔ NFC 링크 타깃도 해석된다 (macOS)', () => {
+  const nfdDocs = [
+    { id: 'doc:nfd', file: `${'설교노트'.normalize('NFD')}.md`, title: '설교노트'.normalize('NFD') },
+  ];
+  const resolve = buildLinkResolver(nfdDocs);
+  assert.equal(resolve('설교노트'.normalize('NFC')), 'doc:nfd');
+  assert.equal(resolve('설교노트'.normalize('NFD')), 'doc:nfd');
+});
