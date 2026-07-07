@@ -28,9 +28,18 @@ test('searchBm25: 빈 질의/무매칭은 빈 배열', () => {
   assert.deepEqual(searchBm25(idx, ['존재하지않는토큰']), []);
 });
 
-test('searchBm25: 결정론 — 동일 입력 동일 순서, 동점 slug 정렬', () => {
+test('searchBm25: 결정론 — 동일 입력 동일 순서', () => {
   const idx = buildBm25Index(docs);
   const r1 = searchBm25(idx, ['하나님']);
   const r2 = searchBm25(idx, ['하나님']);
   assert.deepEqual(r1.map((x) => x.slug), r2.map((x) => x.slug));
+});
+
+test('searchBm25: 동점은 slug 오름차순 (삽입 역순이어도)', () => {
+  // 동일 토큰/길이라 스코어가 정확히 동점 — 삽입은 z가 먼저지만 결과는 a가 앞이어야 함
+  const idx = buildBm25Index([
+    { slug: 'z', tokens: ['solo'] },
+    { slug: 'a', tokens: ['solo'] },
+  ]);
+  assert.deepEqual(searchBm25(idx, ['solo']).map((x) => x.slug), ['a', 'z']);
 });
