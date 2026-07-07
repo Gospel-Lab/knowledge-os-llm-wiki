@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createCache } from '../src/lib/cache.js';
+import { extractFolder } from '../src/lib/extractor.js';
 
 test('createCache: set/get/save 후 재로드 시 값 유지', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-'));
@@ -28,6 +29,24 @@ test('createCache: 손상된 JSON은 빈 캐시로 시작', () => {
     assert.equal(c.get('anything'), undefined);
     c.set('a', 1); c.save();
     assert.equal(createCache(file).get('a'), 1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('extractFolder: 캐시 히트 시 재파싱하지 않는다', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'extract-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'a.md'), '# 제목\n본문 내용');
+    const cache = createCache(path.join(dir, '.cache.json'));
+    const first = await extractFolder(dir, { cache });
+    assert.equal(first.length, 1);
+    assert.equal(first[0].result.body.includes('본문 내용'), true);
+    // 캐시에 기록되어야 함
+    cache.save();
+    const cache2 = createCache(path.join(dir, '.cache.json'));
+    const second = await extractFolder(dir, { cache: cache2 });
+    assert.deepEqual(second[0].result, first[0].result);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
