@@ -4,11 +4,17 @@ import { extractFolder } from './extractor.js';
 import { extractKeywords, keywordSimilarityLinks } from '../vendor/keywords.js';
 import { renderHtml } from '../vendor/render.js';
 import { summarizeNodeWithOllama, checkOllama, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from '../vendor/ollama.js';
-import { ensureDir, slugify, excerpt, nowIso, writeJson } from './utils.js';
+import { ensureDir, createSlugger, excerpt, nowIso, writeJson } from './utils.js';
+import { renderDocPage, renderRawPage, renderConceptPage } from './pages.js';
+import { buildLinkResolver } from './link-resolver.js';
 
 function topFolderFromRel(relPath) {
   const parts = relPath.split('/');
   return parts.length > 1 ? parts[0] : '(root)';
+}
+
+export function defaultMaxConcepts(docCount) {
+  return Math.max(14, Math.min(80, Math.round(Math.sqrt(docCount) * 3)));
 }
 
 function folderSiblingLinks(nodes) {
@@ -51,20 +57,6 @@ function buildSearchContract(doc, relatedDocs, relatedConcepts) {
   };
 }
 
-function frontmatter(data) {
-  const lines = ['---'];
-  for (const [key, value] of Object.entries(data)) {
-    if (Array.isArray(value)) {
-      lines.push(`${key}:`);
-      for (const item of value) lines.push(`  - ${String(item).replace(/\n/g, ' ')}`);
-    } else {
-      lines.push(`${key}: ${String(value).replace(/\n/g, ' ')}`);
-    }
-  }
-  lines.push('---', '');
-  return lines.join('\n');
-}
-
 function unique(items) {
   return [...new Set(items.filter(Boolean))];
 }
@@ -102,16 +94,18 @@ export async function initWorkspace(workspaceRoot, title = 'Company Knowledge OS
   return { workspaceRoot, title };
 }
 
-export async function ingestWorkspace({ source, workspace, title = 'Company Knowledge OS', ollama = false, ollamaModel = DEFAULT_OLLAMA_MODEL, ollamaUrl = DEFAULT_OLLAMA_BASE_URL }) {
+export async function ingestWorkspace({ source, workspace, title = 'Company Knowledge OS', ollama = false, ollamaModel = DEFAULT_OLLAMA_MODEL, ollamaUrl = DEFAULT_OLLAMA_BASE_URL, maxConcepts = null }) {
   ensureDir(workspace);
   await initWorkspace(workspace, title);
   const extracted = await extractFolder(source);
+  const toDocSlug = createSlugger();
   const docs = extracted.map(({ filePath, result }) => {
     const rel = path.relative(source, filePath).split(path.sep).join('/');
     const name = path.basename(filePath, path.extname(filePath));
+    const slug = toDocSlug(rel);
     return {
-      id: `doc:${slugify(rel)}`,
-      slug: slugify(rel),
+      id: `doc:${slug}`,
+      slug,
       title: result.title || name,
       file: rel,
       absolutePath: path.resolve(filePath),
@@ -137,10 +131,12 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
 
   const keywordFreq = new Map();
   for (const doc of docs) unique(doc.keywords).forEach((keyword) => keywordFreq.set(keyword, (keywordFreq.get(keyword) || 0) + 1));
-  const conceptNames = [...keywordFreq.entries()].filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([keyword]) => keyword);
+  const conceptCap = Number.isInteger(maxConcepts) && maxConcepts > 0 ? maxConcepts : defaultMaxConcepts(docs.length);
+  const conceptNames = [...keywordFreq.entries()].filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1]).slice(0, conceptCap).map(([keyword]) => keyword);
 
+  const toConceptSlug = createSlugger();
   const concepts = conceptNames.map((name) => {
-    const slug = slugify(name);
+    const slug = toConceptSlug(name);
     const relatedDocs = docs.filter((doc) => doc.keywords.includes(name));
     return {
       id: `concept:${slug}`,
@@ -157,12 +153,12 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
     };
   });
 
-  const titleToId = new Map(docs.map((doc) => [doc.title, doc.id]));
+  const resolveLink = buildLinkResolver(docs);
   const wikilinks = [];
   const seen = new Set();
   for (const doc of docs) {
     for (const targetTitle of doc.wikilinks) {
-      const target = titleToId.get(targetTitle);
+      const target = resolveLink(targetTitle);
       if (!target || target === doc.id) continue;
       const key = `${doc.id}=>${target}`;
       if (seen.has(key)) continue;
@@ -196,43 +192,13 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
       .filter(Boolean)
       .slice(0, 4);
     const contract = buildSearchContract(doc, relatedDocs, doc.relatedConcepts);
-    const docPage = [
-      frontmatter({ title: doc.title, source_path: doc.file, department: doc.department, keywords: doc.keywords, related_concepts: doc.relatedConcepts, updated_at: nowIso() }),
-      `# ${doc.title}`,
-      '',
-      '## Summary',
-      doc.summary,
-      '',
-      '## Search Contract',
-      '```json',
-      JSON.stringify(contract, null, 2),
-      '```',
-      '',
-      '## Related Concepts',
-      ...(doc.relatedConcepts.length ? doc.relatedConcepts.map((slug) => `- [[${slug}]]`) : ['- 없음']),
-      '',
-      '## Source Excerpt',
-      doc.body.slice(0, 4000),
-      ''
-    ].join('\n');
-    const rawPage = [frontmatter({ title: doc.title, source_path: doc.file, imported_at: nowIso() }), doc.body, ''].join('\n');
-    fs.writeFileSync(path.join(workspace, 'docs', 'documents', `${doc.slug}.md`), docPage, 'utf-8');
-    fs.writeFileSync(path.join(workspace, 'raw', 'imports', `${doc.slug}.md`), rawPage, 'utf-8');
+    fs.writeFileSync(path.join(workspace, 'docs', 'documents', `${doc.slug}.md`), renderDocPage(doc, contract), 'utf-8');
+    fs.writeFileSync(path.join(workspace, 'raw', 'imports', `${doc.slug}.md`), renderRawPage(doc), 'utf-8');
     writeJson(path.join(workspace, 'contracts', `${doc.slug}.json`), contract);
   }
 
   for (const concept of concepts) {
-    const conceptPage = [
-      frontmatter({ title: concept.title, kind: 'concept', related_documents: concept.relatedDocs.map((doc) => doc.slug), keywords: concept.keywords, updated_at: nowIso() }),
-      `# ${concept.title}`,
-      '',
-      concept.summary,
-      '',
-      '## Related Documents',
-      ...concept.relatedDocs.map((doc) => `- [[${doc.slug}]] — ${doc.summary}`),
-      ''
-    ].join('\n');
-    fs.writeFileSync(path.join(workspace, 'docs', 'concepts', `${concept.slug}.md`), conceptPage, 'utf-8');
+    fs.writeFileSync(path.join(workspace, 'docs', 'concepts', `${concept.slug}.md`), renderConceptPage(concept), 'utf-8');
   }
 
   const docNodes = docs.map((doc) => ({ id: doc.id, title: doc.title, type: doc.department, file: doc.file, absolutePath: doc.absolutePath, folder: doc.folder, body: doc.body, ai: { summary: doc.summary, tags: doc.keywords } }));
