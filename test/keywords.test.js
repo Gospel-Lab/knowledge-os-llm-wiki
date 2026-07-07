@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { tokenize, extractKeywords } from '../src/vendor/keywords.js';
+import { defaultMaxConcepts } from '../src/lib/wiki-builder.js';
 
 test('tokenize: 조사가 제거되어 같은 명사로 합쳐진다', () => {
   const tokens = tokenize('하나님은 사랑이시다. 하나님의 사랑, 하나님이 하신 일, 하나님을 찬양');
@@ -34,4 +35,11 @@ test('extractKeywords: 한국어 문서에서 명사형 키워드가 뽑힌다',
   assert.ok(kw1.includes('하나님'));
   assert.ok(kw2.includes('하나님'));
   assert.ok(!kw1.some((k) => /습니다$|입니다$/.test(k)));
+});
+
+test('defaultMaxConcepts: 문서 수에 비례하되 14~80으로 클램프', () => {
+  assert.equal(defaultMaxConcepts(7), 14);    // 소규모: 기존 동작 유지
+  assert.equal(defaultMaxConcepts(100), 30);  // sqrt(100)*3
+  assert.equal(defaultMaxConcepts(700), 79);  // round(sqrt(700)*3)
+  assert.equal(defaultMaxConcepts(10000), 80); // 상한
 });

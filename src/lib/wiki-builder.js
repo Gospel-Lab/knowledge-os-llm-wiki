@@ -12,6 +12,10 @@ function topFolderFromRel(relPath) {
   return parts.length > 1 ? parts[0] : '(root)';
 }
 
+export function defaultMaxConcepts(docCount) {
+  return Math.max(14, Math.min(80, Math.round(Math.sqrt(docCount) * 3)));
+}
+
 function folderSiblingLinks(nodes) {
   const byFolder = new Map();
   for (const node of nodes) {
@@ -89,7 +93,7 @@ export async function initWorkspace(workspaceRoot, title = 'Company Knowledge OS
   return { workspaceRoot, title };
 }
 
-export async function ingestWorkspace({ source, workspace, title = 'Company Knowledge OS', ollama = false, ollamaModel = DEFAULT_OLLAMA_MODEL, ollamaUrl = DEFAULT_OLLAMA_BASE_URL }) {
+export async function ingestWorkspace({ source, workspace, title = 'Company Knowledge OS', ollama = false, ollamaModel = DEFAULT_OLLAMA_MODEL, ollamaUrl = DEFAULT_OLLAMA_BASE_URL, maxConcepts = null }) {
   ensureDir(workspace);
   await initWorkspace(workspace, title);
   const extracted = await extractFolder(source);
@@ -126,7 +130,8 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
 
   const keywordFreq = new Map();
   for (const doc of docs) unique(doc.keywords).forEach((keyword) => keywordFreq.set(keyword, (keywordFreq.get(keyword) || 0) + 1));
-  const conceptNames = [...keywordFreq.entries()].filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([keyword]) => keyword);
+  const conceptCap = Number.isInteger(maxConcepts) && maxConcepts > 0 ? maxConcepts : defaultMaxConcepts(docs.length);
+  const conceptNames = [...keywordFreq.entries()].filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1]).slice(0, conceptCap).map(([keyword]) => keyword);
 
   const toConceptSlug = createSlugger();
   const concepts = conceptNames.map((name) => {
