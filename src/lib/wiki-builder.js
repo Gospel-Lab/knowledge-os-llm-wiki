@@ -48,6 +48,10 @@ function inferQuestions(title, keywords, department) {
   ];
 }
 
+export function pickSearchQuestions(doc) {
+  return (doc.ai?.questions?.length ? doc.ai.questions : inferQuestions(doc.title, doc.keywords, doc.department));
+}
+
 function buildSearchContract(doc, relatedDocs, relatedConcepts) {
   return {
     id: doc.slug,
@@ -59,7 +63,7 @@ function buildSearchContract(doc, relatedDocs, relatedConcepts) {
     keywords: doc.keywords,
     related_documents: relatedDocs.map((item) => item.slug),
     related_concepts: relatedConcepts,
-    search_questions: (doc.ai?.questions?.length ? doc.ai.questions : inferQuestions(doc.title, doc.keywords, doc.department)),
+    search_questions: pickSearchQuestions(doc),
   };
 }
 
