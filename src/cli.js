@@ -13,7 +13,7 @@ function value(name, fallback) {
 
 async function main() {
   if (command === 'help' || command === '--help' || command === '-h') {
-    console.log(`knowledge-os commands:\n\n  init   --workspace ./workspace/company-os --title \"Company Knowledge OS\"\n  ingest --source ./docs --workspace ./workspace/company-os [--title ...] [--max-concepts 40] [--ollama --ollama-model llama3.2]\n  serve  --workspace ./workspace/company-os [--port 3487]\n  demo   # sample docs -> ingest -> serve\n`);
+    console.log(`knowledge-os commands:\n\n  init   --workspace ./workspace/company-os --title \"Company Knowledge OS\"\n  ingest --source ./docs --workspace ./workspace/company-os [--title ...] [--max-concepts 40] [--ollama --ollama-model llama3.2] [--ollama-embeddings --ollama-embed-model bge-m3]\n  serve  --workspace ./workspace/company-os [--port 3487]\n  demo   # sample docs -> ingest -> serve\n`);
     return;
   }
 
@@ -36,6 +36,8 @@ async function main() {
       ollamaModel: value('ollama-model', 'llama3.2'),
       ollamaUrl: value('ollama-url', 'http://127.0.0.1:11434'),
       maxConcepts: typeof args['max-concepts'] === 'string' ? Number(args['max-concepts']) : null,
+      ollamaEmbeddings: Boolean(args['ollama-embeddings']),
+      ollamaEmbedModel: value('ollama-embed-model', 'bge-m3'),
     });
     console.log(JSON.stringify({ ok: true, command, metrics: result.metrics, workspace: result.workspace }, null, 2));
     return;
