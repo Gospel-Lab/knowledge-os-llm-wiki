@@ -6,7 +6,6 @@ This project vendors and adapts several MIT-licensed source files from:
 Vendored/adapted files:
 - `src/vendor/scan.js`
 - `src/vendor/keywords.js`
-- `src/vendor/linker.js`
 - `src/vendor/ollama.js`
 - `src/vendor/render.js`
 - `src/extract/*.js`
