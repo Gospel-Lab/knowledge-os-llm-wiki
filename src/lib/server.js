@@ -4,6 +4,8 @@ import http from 'node:http';
 import { renderDashboardHtml } from './dashboard-template.js';
 import { readJson, scoreByTokenOverlap } from './utils.js';
 import { checkOllama, normalizeOllamaBaseUrl, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from '../vendor/ollama.js';
+import { searchBm25 } from './bm25.js';
+import { tokenize } from '../vendor/keywords.js';
 
 function contentType(filePath) {
   if (filePath.endsWith('.html')) return 'text/html; charset=utf-8';
@@ -41,6 +43,15 @@ export function startServer({ workspace, port = 3487, host = '127.0.0.1' }) {
   if (!state) throw new Error(`state.json not found in ${workspace}`);
   const workspaceRoot = path.resolve(workspace);
 
+  const searchIndexPath = path.join(workspaceRoot, state.search?.index_path || 'search-index.json');
+  const searchIndex = readJson(searchIndexPath, null);
+  const docBySlug = new Map(state.documents.map((d) => [d.slug, d]));
+  function bm25Sources(question, limit) {
+    if (!searchIndex) return null;
+    const ranked = searchBm25(searchIndex, tokenize(question), limit);
+    return ranked.map((r) => docBySlug.get(r.slug)).filter(Boolean);
+  }
+
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === 'GET' && url.pathname === '/') {
@@ -51,6 +62,13 @@ export function startServer({ workspace, port = 3487, host = '127.0.0.1' }) {
     if (req.method === 'GET' && url.pathname === '/api/state') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(state));
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/search') {
+      const q = url.searchParams.get('q') || '';
+      const hits = bm25Sources(q, 10) || [];
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ results: hits.map((d) => ({ slug: d.slug, title: d.title, department: d.department, summary: d.summary })) }));
       return;
     }
     if (req.method === 'GET' && url.pathname.startsWith('/api/doc/')) {
@@ -72,11 +90,11 @@ export function startServer({ workspace, port = 3487, host = '127.0.0.1' }) {
       req.on('end', async () => {
         try {
           const { question = '' } = JSON.parse(body || '{}');
-          const ranked = scoreByTokenOverlap(question, state.documents, ['title', 'summary', 'department', 'source_path', 'body_preview'])
-            .filter((row) => row.score > 0)
-            .slice(0, 5)
-            .map((row) => row.item);
-          const sources = ranked.length ? ranked : state.documents.slice(0, 5);
+          const ranked = bm25Sources(question, 5);
+          const overlap = (ranked && ranked.length) ? ranked
+            : scoreByTokenOverlap(question, state.documents, ['title', 'summary', 'department', 'source_path', 'body_preview'])
+                .filter((row) => row.score > 0).slice(0, 5).map((row) => row.item);
+          const sources = overlap.length ? overlap : state.documents.slice(0, 5);
           const baseUrl = state.settings?.ollamaUrl || process.env.OLLAMA_URL || DEFAULT_OLLAMA_BASE_URL;
           const model = state.settings?.ollamaModel || process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL;
           const answer = await askOllama({ question, sources, baseUrl, model }).catch(() => null);
