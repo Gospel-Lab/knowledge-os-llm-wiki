@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ingestWorkspace } from '../src/lib/wiki-builder.js';
-import { buildBm25Index, searchBm25 } from '../src/lib/bm25.js';
+import { searchBm25 } from '../src/lib/bm25.js';
 import { tokenize } from '../src/vendor/keywords.js';
 
 const FIXTURE = new URL('./fixtures/ko-vault', import.meta.url).pathname;
