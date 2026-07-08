@@ -75,10 +75,19 @@ export function startServer({ workspace, port = 3487, host = '127.0.0.1' }) {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/search') {
-      const q = url.searchParams.get('q') || '';
-      const hits = bm25Sources(q, 10) || [];
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ results: hits.map((d) => ({ slug: d.slug, title: d.title, department: d.department, summary: d.summary })) }));
+      try {
+        const q = url.searchParams.get('q') || '';
+        const ranked = searchIndex ? searchBm25(searchIndex, tokenize(q), 10) : [];
+        const results = ranked.map((r) => {
+          const d = docBySlug.get(r.slug);
+          return d ? { slug: d.slug, title: d.title, department: d.department, summary: d.summary, score: r.score } : null;
+        }).filter(Boolean);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ results }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: error.message, results: [] }));
+      }
       return;
     }
     if (req.method === 'GET' && url.pathname.startsWith('/api/doc/')) {

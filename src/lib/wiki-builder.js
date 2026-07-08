@@ -256,7 +256,10 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
   fs.writeFileSync(path.join(workspace, 'graph', 'company-knowledge-graph.html'), html, 'utf-8');
   copyVendorAssets(path.join(workspace, 'graph', 'vendor'));
 
-  const bm25Docs = docs.map((doc) => ({ slug: doc.slug, tokens: tokenize(doc.body) }));
+  const bm25Docs = docs.map((doc) => ({
+    slug: doc.slug,
+    tokens: [...tokenize(doc.title), ...(doc.keywords || []), ...tokenize(doc.body)],
+  }));
   const searchIndex = buildBm25Index(bm25Docs);
   writeJson(path.join(workspace, 'search-index.json'), searchIndex);
 

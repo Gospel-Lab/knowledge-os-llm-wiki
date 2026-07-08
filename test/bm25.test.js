@@ -43,3 +43,8 @@ test('searchBm25: 동점은 slug 오름차순 (삽입 역순이어도)', () => {
   ]);
   assert.deepEqual(searchBm25(idx, ['solo']).map((x) => x.slug), ['a', 'z']);
 });
+
+test('searchBm25: postings 없는 손상 인덱스는 빈 배열(크래시 없음)', () => {
+  assert.deepEqual(searchBm25({ N: 3 }, ['x']), []);
+  assert.deepEqual(searchBm25({ N: 3, postings: null, idf: {}, docLen: {} }, ['x']), []);
+});
