@@ -572,8 +572,8 @@ function openPanel(n) {
     actions += \`<button type="button" data-open-path="\${escapeHtml(n.absolutePath)}" data-open-kind="file">파일 열기</button>\`;
     actions += \`<button type="button" data-copy-path="\${escapeHtml(n.absolutePath)}">경로 복사</button>\`;
   }
-  if (n.folder) {
-    actions += \`<button type="button" data-open-path="\${escapeHtml(n.folder)}" data-open-kind="folder">폴더 열기</button>\`;
+  if (n.absolutePath) {
+    actions += \`<button type="button" data-open-path="\${escapeHtml(n.absolutePath.replace(/[\\\\/][^\\\\/]*$/, ''))}" data-open-kind="folder">폴더 열기</button>\`;
   }
 
   let aiBlock = "";
@@ -626,11 +626,6 @@ function openPanel(n) {
   });
 }
 
-function graphIdFromLocation() {
-  const match = location.pathname.match(/^\\/graphs\\/([^/]+)/);
-  return match ? decodeURIComponent(match[1]) : "";
-}
-
 function fileUriFor(localPath) {
   return "file:///" + String(localPath || "").replace(/\\\\/g, "/");
 }
@@ -651,9 +646,8 @@ async function openLocalPath(button) {
   button.disabled = true;
   button.textContent = "여는 중...";
   try {
-    const graphId = graphIdFromLocation();
-    if (graphId && /^https?:$/.test(location.protocol)) {
-      const res = await fetch("/graphs/" + encodeURIComponent(graphId) + "/open-path", {
+    if (/^https?:$/.test(location.protocol)) {
+      const res = await fetch("/api/open", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: localPath, kind: button.getAttribute("data-open-kind") || "file" }),

@@ -1,11 +1,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import { renderDashboardHtml } from './dashboard-template.js';
 import { readJson, scoreByTokenOverlap } from './utils.js';
 import { checkOllama, normalizeOllamaBaseUrl, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from '../vendor/ollama.js';
 import { searchBm25 } from './bm25.js';
 import { tokenize } from '../vendor/keywords.js';
+import { resolveOpenTarget } from './open-path.js';
+
+function osOpen(target) {
+  const platform = process.platform;
+  const cmd = platform === 'darwin' ? 'open' : platform === 'win32' ? 'explorer' : 'xdg-open';
+  const child = spawn(cmd, [target], { detached: true, stdio: 'ignore' });
+  child.unref();
+}
 
 function contentType(filePath) {
   if (filePath.endsWith('.html')) return 'text/html; charset=utf-8';
@@ -42,6 +51,7 @@ export function startServer({ workspace, port = 3487, host = '127.0.0.1' }) {
   const state = readJson(statePath);
   if (!state) throw new Error(`state.json not found in ${workspace}`);
   const workspaceRoot = path.resolve(workspace);
+  const openRoots = { source: state.source, workspace: workspaceRoot };
 
   const searchIndexPath = path.join(workspaceRoot, state.search?.index_path || 'search-index.json');
   const searchIndex = readJson(searchIndexPath, null);
@@ -65,10 +75,19 @@ export function startServer({ workspace, port = 3487, host = '127.0.0.1' }) {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/search') {
-      const q = url.searchParams.get('q') || '';
-      const hits = bm25Sources(q, 10) || [];
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ results: hits.map((d) => ({ slug: d.slug, title: d.title, department: d.department, summary: d.summary })) }));
+      try {
+        const q = url.searchParams.get('q') || '';
+        const ranked = searchIndex ? searchBm25(searchIndex, tokenize(q), 10) : [];
+        const results = ranked.map((r) => {
+          const d = docBySlug.get(r.slug);
+          return d ? { slug: d.slug, title: d.title, department: d.department, summary: d.summary, score: r.score } : null;
+        }).filter(Boolean);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ results }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: error.message, results: [] }));
+      }
       return;
     }
     if (req.method === 'GET' && url.pathname.startsWith('/api/doc/')) {
@@ -111,6 +130,34 @@ export function startServer({ workspace, port = 3487, host = '127.0.0.1' }) {
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: error.message }));
+        }
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/open') {
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        try {
+          const { path: reqPath } = JSON.parse(body || '{}');
+          const check = resolveOpenTarget(reqPath, openRoots);
+          if (!check.ok) {
+            res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ ok: false, message: `열 수 없는 경로: ${check.reason}` }));
+            return;
+          }
+          if (!fs.existsSync(check.path)) {
+            res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ ok: false, message: '파일이 존재하지 않습니다' }));
+            return;
+          }
+          osOpen(check.path);
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ ok: true }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ ok: false, message: error.message }));
         }
       });
       return;

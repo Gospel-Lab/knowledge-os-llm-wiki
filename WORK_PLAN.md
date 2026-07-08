@@ -11,7 +11,7 @@
 | Phase 1 | 한국어 토크나이저(조사 스트리핑)·slug 충돌·YAML 안전화·wikilink 파일명 해석·개념 수 동적화 | ✅ 완료 (2026-07-07) |
 | Phase 2 | 해시 기반 증분 ingest, Ollama 병렬+캐시, 그래프 본문 lazy 로드, CDN vendoring | ✅ 완료 (2026-07-08) |
 | Phase 3 | BM25 전문 검색, Ollama 임베딩(bge-m3) 기반 개념 클러스터링, AI questions → Search Contract 연결 | ✅ 완료 (2026-07-08) |
-| Phase 4 | CI, LICENSE, 데드코드(linker.js) 제거, /api/open 구현 | 대기 |
+| Phase 4 | CI, LICENSE, 데드코드(linker.js) 제거, /api/open 구현 | ✅ 완료 (2026-07-08) |
 
 ## Phase 1 상세 계획
 → `docs/plans/2026-07-07-phase1-korean-integrity.md` (Task 0~7, TDD, node:test)
@@ -22,6 +22,7 @@
 - **2026-07-07 (밤)**: Phase 1 구현 완료 — Task 0~7, 리뷰 게이트 통과, 테스트 21개 (커밋 02684c0..HEAD)
 - **2026-07-08**: Phase 2 구현 완료 — 벤더링 오프라인화, 해시 기반 증분 ingest, Ollama 캐시+병렬, 그래프 본문 상한. 서브에이전트 실행+리뷰 게이트 통과 (커밋 f52df6c..HEAD).
 - **2026-07-08**: Phase 3 구현 완료 — 순수 JS BM25 전문검색(/api/search), 임베딩 개념 클러스터링(--ollama-embeddings, TF-IDF 폴백), AI questions→Search Contract 연결. 서브에이전트+리뷰 게이트 통과 (커밋 c153be2..HEAD).
+- **2026-07-08**: Phase 4 구현 완료 — CI(Node 18/20), MIT LICENSE, linker.js 데드코드 제거, /api/open(경로 화이트리스트), Phase 3 이월 하드닝(BM25 title+keywords·/api/search score·pickSearchQuestions). 서브에이전트+리뷰 게이트 통과 (커밋 2ce3f02..HEAD). 4개 페이즈 로드맵 전체 완료.
 
 ## 주의 사항
 - push는 Gospel-Lab gh 계정으로만 (`gh auth switch -u Gospel-Lab`)

@@ -48,6 +48,10 @@ function inferQuestions(title, keywords, department) {
   ];
 }
 
+export function pickSearchQuestions(doc) {
+  return (doc.ai?.questions?.length ? doc.ai.questions : inferQuestions(doc.title, doc.keywords, doc.department));
+}
+
 function buildSearchContract(doc, relatedDocs, relatedConcepts) {
   return {
     id: doc.slug,
@@ -59,7 +63,7 @@ function buildSearchContract(doc, relatedDocs, relatedConcepts) {
     keywords: doc.keywords,
     related_documents: relatedDocs.map((item) => item.slug),
     related_concepts: relatedConcepts,
-    search_questions: (doc.ai?.questions?.length ? doc.ai.questions : inferQuestions(doc.title, doc.keywords, doc.department)),
+    search_questions: pickSearchQuestions(doc),
   };
 }
 
@@ -256,7 +260,10 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
   fs.writeFileSync(path.join(workspace, 'graph', 'company-knowledge-graph.html'), html, 'utf-8');
   copyVendorAssets(path.join(workspace, 'graph', 'vendor'));
 
-  const bm25Docs = docs.map((doc) => ({ slug: doc.slug, tokens: tokenize(doc.body) }));
+  const bm25Docs = docs.map((doc) => ({
+    slug: doc.slug,
+    tokens: [...tokenize(doc.title), ...(doc.keywords || []), ...tokenize(doc.body)],
+  }));
   const searchIndex = buildBm25Index(bm25Docs);
   writeJson(path.join(workspace, 'search-index.json'), searchIndex);
 

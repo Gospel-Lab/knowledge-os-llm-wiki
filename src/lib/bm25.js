@@ -25,7 +25,7 @@ export function buildBm25Index(docs) {
 }
 
 export function searchBm25(index, queryTokens, k = 10, { k1 = 1.5, b = 0.75 } = {}) {
-  if (!queryTokens || !queryTokens.length || !index.N) return [];
+  if (!queryTokens || !queryTokens.length || !index || !index.N || !index.postings) return [];
   const scores = {};
   for (const term of queryTokens) {
     const posting = index.postings[term];

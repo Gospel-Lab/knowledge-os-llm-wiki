@@ -125,6 +125,15 @@ npm run serve -- --workspace ./workspace/company-os --port 3487
 - **안전한 파일명 변환**: NFC 정규화를 거친 충돌 없는 슬러그(slug) 생성; Obsidian 호환 wikilink 해석(경로 > 파일명 > 제목 우선순위)
 - **테스트**: `npm test`로 단위 테스트 실행 (한국어 end-to-end 포함)
 
+## 그래프의 원본 열기 (로컬 파일 열기)
+
+3D 그래프의 노드 위에서 마우스를 올리면 나타나는 "파일 열기" / "폴더 열기" 버튼은 로컬 서버(예: `npm run serve`)가 실행 중일 때만 작동합니다. 로컬 서버의 `/api/open` 엔드포인트가 요청 경로를 `source` 또는 워크스페이스 루트 하위로만 화이트리스트 검증한 뒤 OS의 기본 프로그램으로 여는 로컬 전용 기능입니다.
+
+## 운영
+
+- **CI**: GitHub Actions에서 Node.js 18, 20에서 `npm test`를 실행합니다. (`push` 및 `pull_request` 이벤트)
+- **라이선스**: [MIT License](LICENSE) — `Copyright (c) 2026 Gospel-Lab`
+
 ## 한계
 
 - 현재 개념 추출은 규칙 기반 키워드 집계 중심입니다.
