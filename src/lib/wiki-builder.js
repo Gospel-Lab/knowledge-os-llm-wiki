@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { extractFolder } from './extractor.js';
-import { extractKeywords, keywordSimilarityLinks } from '../vendor/keywords.js';
+import { extractKeywords, keywordSimilarityLinks, tokenize } from '../vendor/keywords.js';
 import { renderHtml } from '../vendor/render.js';
-import { summarizeNodeWithOllama, checkOllama, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL } from '../vendor/ollama.js';
+import { summarizeNodeWithOllama, checkOllama, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL, embedOne, DEFAULT_EMBED_MODEL } from '../vendor/ollama.js';
 import { mapWithConcurrency } from './concurrency.js';
+import { buildBm25Index } from './bm25.js';
+import { extractConceptsTfIdf, extractConceptsEmbedding } from './concepts.js';
 import { contentHash } from './hash.js';
 import { createCache } from './cache.js';
 import { ensureDir, createSlugger, excerpt, nowIso, writeJson, readJson } from './utils.js';
@@ -57,7 +59,7 @@ function buildSearchContract(doc, relatedDocs, relatedConcepts) {
     keywords: doc.keywords,
     related_documents: relatedDocs.map((item) => item.slug),
     related_concepts: relatedConcepts,
-    search_questions: inferQuestions(doc.title, doc.keywords, doc.department),
+    search_questions: (doc.ai?.questions?.length ? doc.ai.questions : inferQuestions(doc.title, doc.keywords, doc.department)),
   };
 }
 
@@ -107,7 +109,7 @@ export async function initWorkspace(workspaceRoot, title = 'Company Knowledge OS
   return { workspaceRoot, title };
 }
 
-export async function ingestWorkspace({ source, workspace, title = 'Company Knowledge OS', ollama = false, ollamaModel = DEFAULT_OLLAMA_MODEL, ollamaUrl = DEFAULT_OLLAMA_BASE_URL, maxConcepts = null, ollamaConcurrency = 4, graphBodyLimit = 2000 }) {
+export async function ingestWorkspace({ source, workspace, title = 'Company Knowledge OS', ollama = false, ollamaModel = DEFAULT_OLLAMA_MODEL, ollamaUrl = DEFAULT_OLLAMA_BASE_URL, maxConcepts = null, ollamaConcurrency = 4, graphBodyLimit = 2000, ollamaEmbeddings = false, ollamaEmbedModel = DEFAULT_EMBED_MODEL }) {
   ensureDir(workspace);
   await initWorkspace(workspace, title);
 
@@ -149,25 +151,36 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
     if (doc.ai?.tags?.length) doc.keywords = unique([...doc.ai.tags, ...doc.keywords]).slice(0, 8);
   });
 
-  const keywordFreq = new Map();
-  for (const doc of docs) unique(doc.keywords).forEach((keyword) => keywordFreq.set(keyword, (keywordFreq.get(keyword) || 0) + 1));
   const conceptCap = Number.isInteger(maxConcepts) && maxConcepts > 0 ? maxConcepts : defaultMaxConcepts(docs.length);
-  const conceptNames = [...keywordFreq.entries()].filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1]).slice(0, conceptCap).map(([keyword]) => keyword);
+  const docMini = docs.map((d) => ({ slug: d.slug, keywords: d.keywords }));
+
+  let conceptSpecs = null;
+  if (ollamaEmbeddings) {
+    const status = await checkOllama({ baseUrl: ollamaUrl, model: ollamaEmbedModel });
+    if (status.ok) {
+      const vectors = await mapWithConcurrency(docs, ollamaConcurrency || 4,
+        (d) => embedOne(d.body, { baseUrl: ollamaUrl, model: ollamaEmbedModel }));
+      if (vectors.every((v) => Array.isArray(v) && v.length)) {
+        conceptSpecs = extractConceptsEmbedding(docMini, vectors, { maxConcepts: conceptCap });
+      }
+    }
+  }
+  if (!conceptSpecs) conceptSpecs = extractConceptsTfIdf(docMini, { maxConcepts: conceptCap });
 
   const toConceptSlug = createSlugger();
-  const concepts = conceptNames.map((name) => {
-    const slug = toConceptSlug(name);
-    const relatedDocs = docs.filter((doc) => doc.keywords.includes(name));
+  const concepts = conceptSpecs.map((spec) => {
+    const slug = toConceptSlug(spec.title);
+    const relatedDocs = docs.filter((doc) => spec.relatedSlugs.includes(doc.slug));
     return {
       id: `concept:${slug}`,
       slug,
-      title: name,
+      title: spec.title,
       type: 'Concept',
       folder: 'Concepts',
       file: `concepts/${slug}.md`,
       absolutePath: path.join(workspace, 'docs', 'concepts', `${slug}.md`),
-      body: `${name} 관련 핵심 문서: ${relatedDocs.map((doc) => doc.title).join(', ')}`,
-      summary: `${name}는 ${relatedDocs.length}개 문서에 걸쳐 반복적으로 등장하는 핵심 개념입니다.`,
+      body: `${spec.title} 관련 핵심 문서: ${relatedDocs.map((doc) => doc.title).join(', ')}`,
+      summary: `${spec.title}는 ${relatedDocs.length}개 문서에 걸쳐 등장하는 핵심 개념입니다.`,
       keywords: unique(relatedDocs.flatMap((doc) => doc.keywords)).slice(0, 8),
       relatedDocs,
     };
@@ -193,7 +206,7 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
   const conceptCooccur = [];
 
   for (const doc of docs) {
-    doc.relatedConcepts = concepts.filter((concept) => doc.keywords.includes(concept.title)).map((concept) => concept.slug);
+    doc.relatedConcepts = concepts.filter((c) => c.relatedDocs.some((rd) => rd.slug === doc.slug)).map((c) => c.slug);
   }
   for (const concept of concepts) {
     for (const doc of concept.relatedDocs) conceptLinks.push({ source: doc.id, target: concept.id, kind: 'semantic' });
@@ -243,6 +256,10 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
   fs.writeFileSync(path.join(workspace, 'graph', 'company-knowledge-graph.html'), html, 'utf-8');
   copyVendorAssets(path.join(workspace, 'graph', 'vendor'));
 
+  const bm25Docs = docs.map((doc) => ({ slug: doc.slug, tokens: tokenize(doc.body) }));
+  const searchIndex = buildBm25Index(bm25Docs);
+  writeJson(path.join(workspace, 'search-index.json'), searchIndex);
+
   const state = {
     title,
     generated_at: nowIso(),
@@ -251,6 +268,7 @@ export async function ingestWorkspace({ source, workspace, title = 'Company Know
     settings: { ollama, ollamaModel, ollamaUrl },
     metrics: { documents: docs.length, concepts: concepts.length, links: links.length, departments: unique(docs.map((doc) => doc.department)).length },
     graph: { file: 'graph/company-knowledge-graph.html' },
+    search: { index_path: 'search-index.json' },
     documents: docs.map((doc) => ({ slug: doc.slug, title: doc.title, department: doc.department, source_path: doc.file, summary: doc.summary, keywords: doc.keywords, related_concepts: doc.relatedConcepts, page_path: `docs/documents/${doc.slug}.md`, raw_path: `raw/imports/${doc.slug}.md`, contract_path: `contracts/${doc.slug}.json`, body_preview: excerpt(doc.body, 420) })),
     concepts: concepts.map((concept) => ({ slug: concept.slug, title: concept.title, summary: concept.summary, keywords: concept.keywords, related_documents: concept.relatedDocs.map((doc) => doc.slug), page_path: `docs/concepts/${concept.slug}.md` }))
   };

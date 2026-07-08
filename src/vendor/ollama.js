@@ -1,5 +1,6 @@
 export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 export const DEFAULT_OLLAMA_MODEL = "llama3.2";
+export const DEFAULT_EMBED_MODEL = "bge-m3";
 
 export function normalizeOllamaBaseUrl(baseUrl = DEFAULT_OLLAMA_BASE_URL) {
   const trimmed = String(baseUrl || DEFAULT_OLLAMA_BASE_URL).trim().replace(/\/+$/, "");
@@ -96,6 +97,20 @@ export async function checkOllama({
       message,
       setupHint: ollamaSetupHint({ baseUrl: normalizedBaseUrl, model }),
     };
+  }
+}
+
+export async function embedOne(text, { baseUrl = DEFAULT_OLLAMA_BASE_URL, model = DEFAULT_EMBED_MODEL, timeoutMs = 60000 } = {}) {
+  try {
+    const data = await fetchJson(
+      ollamaApiUrl(baseUrl, "embeddings"),
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, prompt: String(text || "").slice(0, 8000) }) },
+      timeoutMs
+    );
+    const vec = data?.embedding;
+    return Array.isArray(vec) && vec.length ? vec : null;
+  } catch {
+    return null;
   }
 }
 
